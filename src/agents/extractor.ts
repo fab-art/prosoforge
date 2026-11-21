@@ -7,7 +7,7 @@
 // skipping tables, headings, footnotes/endnotes, equations, headers/footers,
 // and paragraphs styled as TOC/Caption/Bibliography.
 
-import type { UnpackedDocx } from "../utils/docx";
+import type { UnpackedDocx, Document, Element } from "../utils/docx";
 import {
   unpackDocx,
   scrubMetadata,

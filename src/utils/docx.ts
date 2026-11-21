@@ -1,13 +1,28 @@
 // ============================================================================
 // docx.ts — .docx OpenXML unpack/repack, metadata scrub, & paragraph I/O
 // ============================================================================
-// Uses JSZip + DOMParser/XMLSerializer. We preserve EVERY XML namespace and
-// never destroy formatting: tables, headings, footnotes, equations, headers
-// and footers are strictly skipped during paragraph extraction but left
-// untouched in the document so the rebuilt .docx is byte-faithful except for
-// the body paragraph text runs we replace.
+// Uses JSZip + @xmldom/xmldom (a pure-JS W3C DOM that works inside Web Workers,
+// where the browser's native DOMParser/XMLSerializer are unavailable). We
+// preserve EVERY XML namespace and never destroy formatting: tables, headings,
+// footnotes, equations, headers and footers are strictly skipped during
+// paragraph extraction but left untouched in the document so the rebuilt .docx
+// is byte-faithful except for the body paragraph text runs we replace.
 
 import JSZip from "jszip";
+import {
+  DOMParser,
+  XMLSerializer,
+  type Element as XmlElement,
+  type Document as XmlDocument,
+  type Node as XmlNode,
+} from "@xmldom/xmldom";
+
+// Re-export so other modules (auditor, worker) don't have to depend on or
+// import @xmldom/xmldom types directly — they get the right DOM type via
+// the docx module's public surface.
+export type Element = XmlElement;
+export type Document = XmlDocument;
+export type Node = XmlNode;
 
 const NS = {
   w: "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
@@ -57,6 +72,11 @@ export interface UnpackedDocx {
   filenames: string[];
 }
 
+// Shared parser/serializer instances. @xmldom/xmldom is reentrant and safe
+// to reuse across documents.
+const parser = new DOMParser();
+const serializer = new XMLSerializer();
+
 /** Unpack a .docx Blob/ArrayBuffer into JSZip and read the core parts. */
 export async function unpackDocx(
   data: ArrayBuffer | Blob
@@ -75,16 +95,49 @@ export async function unpackDocx(
   return { zip, documentXml, coreXml, appXml, filenames };
 }
 
+// ---------------------------------------------------------------------------
+// xmldom helpers
+// ---------------------------------------------------------------------------
+// @xmldom/xmldom does not implement getElementsByTagNameNS reliably for the
+// default Word namespace, so we walk descendants by localName instead. We also
+// avoid relying on getElementsByClassName / classList — neither exists.
+
+/** Walk all descendant ELEMENT nodes whose localName matches `name`. */
+function getDescendantsByLocalName(
+  root: Node,
+  name: string
+): Element[] {
+  const out: Element[] = [];
+  const walk = (node: Node) => {
+    if (node.nodeType === 1) {
+      const el = node as Element;
+      if (el.localName === name || el.nodeName === name) out.push(el);
+    }
+    for (let i = 0; i < node.childNodes.length; i++) {
+      walk(node.childNodes[i]!);
+    }
+  };
+  walk(root);
+  return out;
+}
+
+/** Find the first descendant element by localName. */
+function firstByLocalName(root: Node, name: string): Element | null {
+  return getDescendantsByLocalName(root, name)[0] ?? null;
+}
+
+/** Read a `w:val` attribute, supporting both prefixed and namespace-qualified forms. */
+function getWVal(el: Element): string | null {
+  return el.getAttribute("w:val") ?? el.getAttribute(NS.w + ":val") ?? null;
+}
+
 /** Scrub identifying/generator metadata from core.xml & app.xml in place. */
 export function scrubMetadata(doc: UnpackedDocx): string[] {
   const scrubbed: string[] = [];
 
   // ---- core.xml ----
   if (doc.coreXml) {
-    const dom = new DOMParser().parseFromString(
-      doc.coreXml,
-      "application/xml"
-    );
+    const dom = parser.parseFromString(doc.coreXml, "application/xml");
     const coreProps = [
       "dc:creator",
       "cp:lastModifiedBy",
@@ -98,29 +151,28 @@ export function scrubMetadata(doc: UnpackedDocx): string[] {
       "cp:lastPrinted",
       "dcterms:created",
       "dcterms:modified",
-      "customXml:LastErrorPrinted",
     ];
     for (const tag of coreProps) {
       const nodes = dom.getElementsByTagName(tag);
       // Iterate backwards because we mutate live lists.
       for (let i = nodes.length - 1; i >= 0; i--) {
-        const n = nodes[i];
+        const n = nodes.item(i);
+        if (!n) continue;
         n.textContent = "ProseForge";
         scrubbed.push(tag);
       }
     }
-    // Force lastModifiedBy empty value to avoid leaking username.
-    const lastMod = dom.getElementsByTagName("cp:lastModifiedBy")[0];
+    const lastMod = dom.getElementsByTagName("cp:lastModifiedBy").item(0);
     if (lastMod) lastMod.textContent = "ProseForge";
     doc.zip.file(
       "docProps/core.xml",
-      new XMLSerializer().serializeToString(dom)
+      serializer.serializeToString(dom)
     );
   }
 
   // ---- app.xml ----
   if (doc.appXml) {
-    const dom = new DOMParser().parseFromString(doc.appXml, "application/xml");
+    const dom = parser.parseFromString(doc.appXml, "application/xml");
     const appProps = [
       "Application",
       "Company",
@@ -144,7 +196,8 @@ export function scrubMetadata(doc: UnpackedDocx): string[] {
     for (const tag of appProps) {
       const nodes = dom.getElementsByTagName(tag);
       for (let i = nodes.length - 1; i >= 0; i--) {
-        const n = nodes[i];
+        const n = nodes.item(i);
+        if (!n) continue;
         // Application stays as a neutral label; others go blank.
         n.textContent = tag === "Application" ? "ProseForge" : "";
         scrubbed.push(tag);
@@ -152,7 +205,7 @@ export function scrubMetadata(doc: UnpackedDocx): string[] {
     }
     doc.zip.file(
       "docProps/app.xml",
-      new XMLSerializer().serializeToString(dom)
+      serializer.serializeToString(dom)
     );
   }
 
@@ -175,36 +228,39 @@ interface ExtractedParagraphInternal {
 export function parseDocumentBody(
   documentXml: string
 ): { dom: Document; paragraphs: ExtractedParagraphInternal[] } {
-  const dom = new DOMParser().parseFromString(documentXml, "application/xml");
-  if (dom.getElementsByTagName("parsererror").length > 0) {
+  const dom = parser.parseFromString(documentXml, "application/xml");
+
+  // xmldom does not surface parse errors as <parsererror> nodes; check the
+  // document element instead.
+  if (!dom.documentElement) {
     throw new Error("word/document.xml is not well-formed XML.");
   }
 
   const paragraphs: ExtractedParagraphInternal[] = [];
-  const body = dom.getElementsByTagNameNS(NS.w, "body")[0];
+  const body = firstByLocalName(dom, "body");
   if (!body) {
     throw new Error("word/document.xml has no <w:body> element.");
   }
 
   // Iterate DIRECT children of body so we can detect tbl / sectPr boundaries.
   let index = 0;
-  for (let i = 0; i < body.children.length; i++) {
-    const child = body.children[i];
-    if (!child) continue;
-    const localName = child.localName;
+  for (let i = 0; i < body.childNodes.length; i++) {
+    const childNode = body.childNodes[i]!;
+    if (childNode.nodeType !== 1) continue; // skip text/whitespace
+    const child = childNode as Element;
 
-    if (localName === "tbl") continue; // Skip tables.
-    if (localName === "sectPr") continue; // Section properties.
-    if (localName !== "p") continue; // Only paragraphs flow.
+    if (child.localName === "tbl") continue; // Skip tables.
+    if (child.localName === "sectPr") continue; // Section properties.
+    if (child.localName !== "p") continue; // Only paragraphs flow.
 
     if (containsEquation(child)) continue; // Skip paragraphs with equations.
 
     const styleId = getParagraphStyleId(child);
     if (styleId && SKIP_STYLE_IDS.has(styleId)) continue;
 
-    // Skip if it's inside a footnote/endnote context — those parts live in
+    // Skip paragraphs that embed footnote/endnote references — those live in
     // footnotes.xml / endnotes.xml so a body <w:p> with these is rare but we
-    // still defensively check for embedded reference marks.
+    // still defensively check.
     if (hasFootnoteReference(child)) continue;
 
     const text = extractParagraphText(child);
@@ -213,7 +269,7 @@ export function parseDocumentBody(
     paragraphs.push({
       index,
       text,
-      xml: new XMLSerializer().serializeToString(child),
+      xml: serializer.serializeToString(child),
       node: child,
     });
     index++;
@@ -224,45 +280,47 @@ export function parseDocumentBody(
 
 /** Detect <m:oMath> in any descendant. */
 function containsEquation(p: Element): boolean {
-  return p.getElementsByTagNameNS(NS.m, "oMath").length > 0;
+  return getDescendantsByLocalName(p, "oMath").length > 0;
 }
 
 /** Detect footnote/endnote references in any descendant. */
 function hasFootnoteReference(p: Element): boolean {
   return (
-    p.getElementsByTagNameNS(NS.w, "footnoteReference").length > 0 ||
-    p.getElementsByTagNameNS(NS.w, "endnoteReference").length > 0
+    getDescendantsByLocalName(p, "footnoteReference").length > 0 ||
+    getDescendantsByLocalName(p, "endnoteReference").length > 0
   );
 }
 
 /** Read the pStyle val from <w:pPr><w:pStyle w:val="..."/></w:pPr>. */
 function getParagraphStyleId(p: Element): string | null {
-  const pPr = p.getElementsByTagNameNS(NS.w, "pPr")[0];
+  const pPr = firstByLocalName(p, "pPr");
   if (!pPr) return null;
-  const pStyle = pPr.getElementsByTagNameNS(NS.w, "pStyle")[0];
+  const pStyle = firstByLocalName(pPr, "pStyle");
   if (!pStyle) return null;
-  return pStyle.getAttribute("w:val") ?? null;
+  return getWVal(pStyle);
 }
 
 /** Concatenate all <w:t> nodes inside a paragraph, preserving order. */
 function extractParagraphText(p: Element): string {
-  const ts = p.getElementsByTagNameNS(NS.w, "t");
+  const ts = getDescendantsByLocalName(p, "t");
   let out = "";
-  for (let i = 0; i < ts.length; i++) {
-    const t = ts[i];
-    if (t.parentNode && isInsideTabOrDeleted(t, p)) continue;
+  for (const t of ts) {
+    if (isInsideDeleted(t, p)) continue;
     out += t.textContent ?? "";
   }
   return out;
 }
 
-/** Walk up parents and stop at `root`. Returns true if t is inside a
- * tab/break/deleted-run wrapper (which we ignore for plain-text extraction). */
-function isInsideTabOrDeleted(t: Element, root: Element): boolean {
-  let cur: Element | null = t;
+/** Walk up parents and stop at `root`. Returns true if t is inside a tracked
+ * deletion (w:del). */
+function isInsideDeleted(t: Element, root: Element): boolean {
+  let cur: Node | null = t;
   while (cur && cur !== root) {
-    if (cur.localName === "del") return true; // tracked deletion
-    cur = cur.parentElement;
+    if (cur.nodeType === 1) {
+      const el = cur as Element;
+      if (el.localName === "del" || el.nodeName === "del") return true;
+    }
+    cur = cur.parentNode;
   }
   return false;
 }
@@ -270,22 +328,35 @@ function isInsideTabOrDeleted(t: Element, root: Element): boolean {
 /**
  * Write the rewritten text back into the paragraph's <w:t> nodes while
  * preserving all formatting. Strategy:
- *   - If the paragraph has exactly one <w:t>, replace its content.
- *   - Otherwise: collapse all <w:t> into the first run's <w:t> and empty the
- *     others, so rPr formatting on the first run carries through. This keeps
- *     bold/italics/superscripts intact without corrupting the structure.
+ *   - If the paragraph has at least one <w:t>, replace the first one's text
+ *     and empty the rest, so rPr formatting on the first run carries through.
+ *   - Otherwise: create a fresh <w:r><w:t xml:space="preserve">…</w:t></w:r>
+ *     inside the paragraph, after any existing <w:pPr>.
  */
 export function writeParagraphText(p: Element, newText: string): void {
-  const ts = Array.from(p.getElementsByTagNameNS(NS.w, "t"));
+  const ts = getDescendantsByLocalName(p, "t");
   if (ts.length === 0) {
-    // No runs to update — bail out silently (paragraph had no <w:r>).
+    // No runs to update — append a fresh run.
+    const doc = p.ownerDocument;
+    if (!doc) return;
+    const r = doc.createElementNS(NS.w, "w:r");
+    const t = doc.createElementNS(NS.w, "w:t");
+    t.setAttribute("xml:space", "preserve");
+    t.appendChild(doc.createTextNode(newText));
+    r.appendChild(t);
+    p.appendChild(r);
     return;
   }
-  const first = ts[0];
-  first.textContent = newText;
+  const first = ts[0]!;
+  // Clear existing children of the first <w:t> and set new text.
+  while (first.firstChild) first.removeChild(first.firstChild);
+  first.appendChild(
+    (first.ownerDocument ?? p.ownerDocument)!.createTextNode(newText)
+  );
   // Empty (but keep) the rest so structure stays valid.
   for (let i = 1; i < ts.length; i++) {
-    ts[i].textContent = "";
+    const t = ts[i]!;
+    while (t.firstChild) t.removeChild(t.firstChild);
   }
   // Ensure xml:space="preserve" on the first <w:t> so leading/trailing
   // spaces in the rewrite are honored.
@@ -296,9 +367,13 @@ export function writeParagraphText(p: Element, newText: string): void {
 
 /** Serialize the whole document back into a string ready to be zipped. */
 export function serializeDocument(dom: Document): string {
+  const root = dom.documentElement;
+  if (!root) {
+    throw new Error("Cannot serialize: document has no root element.");
+  }
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
-    new XMLSerializer().serializeToString(dom.documentElement)
+    serializer.serializeToString(root)
   );
 }
 
@@ -320,3 +395,7 @@ export function totalWordCount(paragraphs: { text: string }[]): number {
     0
   );
 }
+
+// Re-export helpers so the auditor (which re-writes via writeParagraphText
+// during checkpoint resume) can access them without a dynamic import.
+export { writeParagraphText as _writeParagraphText };
