@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@mlc-ai/web-llm": "^0.2.78",
+    "@xmldom/xmldom": "^0.9.12",
     "diff": "^7.0.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.460.0",

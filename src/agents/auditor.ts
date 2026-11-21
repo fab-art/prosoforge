@@ -14,8 +14,14 @@ import {
   typographicPolish,
 } from "../utils/citations";
 import { countWords } from "../utils/style";
-import { writeParagraphText, serializeDocument, repackDocx } from "../utils/docx";
-import type { UnpackedDocx } from "../utils/docx";
+import {
+  writeParagraphText,
+  serializeDocument,
+  repackDocx,
+  type UnpackedDocx,
+  type Element,
+  type Document,
+} from "../utils/docx";
 import { runRewriter, type LlmEngine } from "./rewriter";
 import type { ModelId, RewriteIntensity, StyleProfile } from "../types";
 

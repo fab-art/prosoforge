@@ -47,6 +47,8 @@ import {
   loadMeta,
   clearCheckpoint,
 } from "../utils/db";
+import { writeParagraphText, type Element } from "../utils/docx";
+import { profileParagraph } from "../utils/style";
 
 // ---------------------------------------------------------------------------
 // Engine config
@@ -327,7 +329,6 @@ async function runPipeline(
           // Re-write the saved output into the DOM so a final rebuild is correct.
           // (DOM was re-parsed by Agent 1; saved text is the truth.)
           try {
-            const { writeParagraphText } = await import("../utils/docx");
             writeParagraphText(docState.nodes[saved.index], saved.outputText);
           } catch {
             /* ignore */
@@ -389,7 +390,6 @@ async function runPipeline(
 
       // After audit, recompute metrics on the output for telemetry.
       const updated = docState.paragraphs[i];
-      const { profileParagraph } = await import("../utils/style");
       const afterMetrics = profileParagraph(updated.outputText);
       burstinessSum += Math.max(0, afterMetrics.sentenceLengthStdDev - beforeStdDev);
       aiTellSum += Math.max(0, beforeAiTell - afterMetrics.aiClicheCount);
