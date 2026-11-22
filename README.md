@@ -1,266 +1,135 @@
-# ProseForge
+# Research Workstation
 
-**Academic `.docx` Sanitizer & Multi-Agent Structural Rewriter**
+A free, open, in-browser research assistant — an answerthis.ai-style "upload a paper and chat with it" tool, combined with a full literature-review and thesis-writing workspace. **Everything runs client-side: no account, no backend, your documents never leave the browser.** LLM inference is local via [WebLLM](https://github.com/MLC-AI/web-llm) (WebGPU).
 
-A 100% client-side Progressive Web App that unpacks an academic `.docx`, scrubs
-author/generator metadata, locks every citation and statistical value behind
-numbered placeholders, then runs a 5-agent pipeline — coordinated by a
-state-machine orchestrator inside a Web Worker — to structurally rewrite body
-paragraphs using a WebGPU-accelerated LLM (`@mlc-ai/web-llm`). All processing
-happens in the browser. No data ever leaves the user's device.
+## Features
 
----
+### answerthis.ai core (the "Upload & Chat" landing)
+- **📄 Upload a PDF** (or `.txt` / `.md`) → text is extracted **client-side** with PDF.js → chat with the document.
+- **💬 Paper Q&A** grounded in retrieved context. Uses WebLLM if a model is loaded; otherwise falls back to honest keyword-overlap retrieval that says *"this source does not address your question"* rather than guessing.
 
-## Highlights
+### Literature review workspace
+- **🔍 Literature Search** across 6 free APIs: CrossRef, OpenAlex, Semantic Scholar, arXiv, PubMed, DOAJ. Deduped by title. Manual-entry fallback for paywalled/CSP-blocked papers.
+- **🔭 Research Gap Finder** — heuristic flags for recency, geographic concentration, self-reported limitation language, abstract coverage, source diversity. Labeled **ADVISORY**.
+- **✍️ AI Writer** — drafts a paragraph grounded **strictly** in your collected papers (and optionally uploaded PDFs). WebLLM synthesis with `[n]` inline citations → real APA/MLA/Chicago in-text citations. Fallback: verbatim-quote scaffold ranked by keyword overlap. Labeled **DRAFT — verify & rewrite**.
+- **📝 Thesis Workspace** — draft editor with live per-paragraph style checks (sentence-length uniformity, AI-cliché phrases, passive-voice density). Advisory only, never auto-edits. Export to `.md` / `.html` / `.txt`.
+- **📌 Resource & Idea Board** — tagged, searchable notes. localStorage only.
+- **📖 Citation Manager** — manual entry + one-click import from your paper library; APA/MLA/Chicago auto-formatting with serial commas.
+- **🕷️ Web Scraper** — fetch any URL via a CORS proxy (r.jina.ai recommended), extract readable text, save as a chat-able resource.
+- **🧹 Document Cleaner** — legitimate copy-editing (whitespace, smart quotes, spacing) + an advisory "AI-tells" panel. **NOT an evasion tool**: it will never strip metadata or disguise AI authorship.
+- **✅ Checks Summary** — rollup of workspace flags across the whole draft.
 
-- **5 specialized micro-agents** in a state-machine orchestrator:
-  1. `.docx` XML Extractor & Metadata Scrubber (deterministic)
-  2. Unicode Sanitizer & Entity/Citation Masker (deterministic)
-  3. Triage & Author Style Profiler (deterministic math, 30–50% inference skip)
-  4. Structural Rewriter & Rhythm Critic (WebGPU LLM, with deterministic critic pass)
-  5. Integrity Auditor & `.docx` XML Rebuilder (deterministic guardrail)
-- **Citation & numeric locking.** Every `(Author, Year)`, `[1]`, `p < 0.05`,
-  `n = 142`, `42.8%`, `500mg`, year, and decimal is replaced with a numbered
-  placeholder before the LLM sees the text. Agent 5 verifies 100% survive the
-  rewrite verbatim; otherwise it auto-retries once, then falls back to the
-  sanitized original and flags the paragraph for manual review.
-- **Metadata scrubbing.** `dc:creator`, `cp:lastModifiedBy`, `Application`,
-  `Company`, `TotalTime`, etc. are blanked in `docProps/core.xml` and
-  `docProps/app.xml` before repack.
-- **Strict extraction.** Tables, headings, footnotes/endnotes, equations
-  (`<m:oMath>`), TOC/Caption/Bibliography styles, and headers/footers are
-  skipped during paragraph extraction — but left untouched in the document so
-  formatting is never corrupted.
-- **Innovations baked in:**
-  - **IndexedDB checkpoint persistence** — every completed paragraph is
-    auto-saved; refresh the tab mid-thesis and you resume from the exact
-    paragraph.
-  - **Thermal & memory pacing** — micro-yields (`requestIdleCallback`/
-    `setTimeout`) between paragraphs and per-paragraph `resetChat()` so
-    KV-cache VRAM never bloats across a 50+ page document.
-  - **Smart paragraph batching & critic pass** — the rewriter has a deterministic
-    critic that re-runs the LLM if AI clichés reappear or sentence-length
-    variance collapses.
-  - **Deterministic post-LLM typographic polish** — fixes spacing around
-    restored citations.
-- **Side-by-side diff inspector** — click any paragraph to Accept, Revert,
-  Re-roll, or Manually Edit before exporting.
-- **One-click export** — rebuilt `.docx` (metadata-scrubbed, citations
-  restored) plus an optional `.json` or Markdown audit report.
-
----
-
-## Tech Stack
-
-| Concern | Choice |
-| --- | --- |
-| Framework | Vite + React 18 + TypeScript (strict) |
-| Styling | Tailwind CSS + `lucide-react` |
-| LLM runtime | `@mlc-ai/web-llm` (WebGPU, in a Web Worker) |
-| .docx I/O | `jszip` + native `DOMParser`/`XMLSerializer` |
-| Diffing | `diff` (word-level side-by-side) |
-| PWA | `vite-plugin-pwa` (Workbox, with model CDN exclude rules) |
-
-Default model: `Qwen2.5-3B-Instruct-q4f16_1-MLC` (~2.4 GB VRAM). Alternatives:
-`Llama-3.2-3B-Instruct-q4f16_1-MLC`, `gemma-2-2b-it-q4f16_1-MLC`.
-
----
-
-## Project Layout
-
-```
-proseforge/
-├── index.html
-├── package.json
-├── postcss.config.js
-├── tailwind.config.js
-├── tsconfig.json
-├── vercel.json                 # SPA rewrites + COOP/COEP headers
-├── vite.config.ts              # PWA config w/ model-CDN cache exclusion
-├── public/
-│   ├── favicon.svg
-│   └── robots.txt
-└── src/
-    ├── main.tsx
-    ├── App.tsx
-    ├── index.css
-    ├── vite-env.d.ts
-    ├── types/
-    │   └── index.ts            # All shared types (incl. LockedPlaceholders)
-    ├── utils/
-    │   ├── citations.ts        # Agent 2 placeholder lock/restore/verify
-    │   ├── db.ts               # IndexedDB checkpoint persistence
-    │   ├── diff.ts             # Word-level diff helper for UI
-    │   ├── docx.ts             # Unpack / scrub / parse / repack OpenXML
-    │   ├── style.ts            # Burstiness + AI-tell profiling
-    │   └── unicode.ts          # Invisible char strip + typographic norm
-    ├── agents/
-    │   ├── extractor.ts        # Agent 1
-    │   ├── sanitizer.ts        # Agent 2
-    │   ├── triage.ts           # Agent 3
-    │   ├── rewriter.ts         # Agent 4 (LLM + critic)
-    │   └── auditor.ts          # Agent 5 (verify, restore, rebuild)
-    ├── workers/
-    │   └── pipelineWorker.ts   # Orchestrator + WebLLM engine
-    ├── hooks/
-    │   └── usePipelineWorker.ts
-    └── components/
-        ├── HardwareBar.tsx     # WebGPU detection + model selector
-        ├── SetupDrawer.tsx     # Upload + style sample + glossary + intensity
-        ├── Telemetry.tsx       # Live agent stage + metrics
-        ├── DiffInspector.tsx   # Side-by-side diff + accept/revert/reroll/edit
-        └── ExportPanel.tsx     # Download .docx + audit .json/.md
-```
-
----
-
-## Local Development
-
-```bash
-npm install
-npm run dev          # http://localhost:5173
-```
-
-> **WebGPU requirement.** Use Chrome/Edge 113+ (desktop) or any browser with
-> WebGPU enabled. If `navigator.gpu` is missing, the UI shows a clear message.
-
-### Production Build
-
-```bash
-npm run build        # tsc -b && vite build  →  ./dist
-npm run preview      # serve the production bundle locally
-```
-
-The build is verified to compile with **zero TypeScript errors** and produces a
-valid production bundle including the PWA service worker.
-
----
-
-## Deploy to Vercel
-
-The repo is zero-config Vercel-ready. Two options:
-
-### Option A — CLI
-
-```bash
-npm i -g vercel
-vercel              # preview deployment
-vercel --prod       # production deployment
-```
-
-### Option B — Dashboard
-
-1. Push this folder to a GitHub/GitLab/Bitbucket repo.
-2. In Vercel → **Add New → Project** → import the repo.
-3. Framework preset: **Vite**. Build command `npm run build`, output dir `dist`.
-4. Click **Deploy**. Vercel reads `vercel.json` automatically.
-
-### `vercel.json` (included)
-
-```json
-{
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
-        { "key": "Cross-Origin-Embedder-Policy", "value": "credentialless" },
-        { "key": "Cross-Origin-Resource-Policy", "value": "cross-origin" },
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
-      ]
-    },
-    {
-      "source": "/assets/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
-    }
-  ]
-}
-```
-
-The `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy:
-credentialless` pair enables `SharedArrayBuffer` (used by WebLLM for some
-models) while still permitting the cross-origin model CDN fetches from
-`huggingface.co` / `raw.githubusercontent.com` / `mlc-ai`. The PWA's Workbox
-runtime caching is explicitly configured **never** to cache or purge those
-endpoints — model shards live in IndexedDB / Cache API under WebLLM's own
-control.
-
----
-
-## How the Pipeline Works
-
-```
-.docx upload
-   │
-   ▼
-[Agent 1] unpack (JSZip) → scrub metadata → parse word/document.xml
-   │     (skip tables, headings, footnotes, equations, TOC/Caption)
-   ▼
-[Agent 2] strip invisible Unicode Cf → normalize AI typographic artifacts
-   │     → lock citations/numerics/glossary behind [[CIT_*]] [[NUM_*]] [[TERM_*]]
-   ▼
-[Agent 3] profile author style (optional) → score burstiness + AI-cliche density
-   │     → smart routing: skip paragraphs <25 words or already human-bursty
-   ▼
-[Agent 4] per-paragraph WebGPU LLM rewrite (style + 2-sentence continuity context)
-   │     → critic pass: re-run if AI clichés reappear or variance collapses
-   ▼
-[Agent 5] verify 100% of placeholders survived → ±15% word-count check
-   │     → restore originals → typographic polish → write back into <w:t>
-   │     → on failure: retry once, else revert to sanitized original + flag
-   ▼
-repack .docx → download Blob + audit report (.json / .md)
-```
-
-After every paragraph, Agent 5 checkpoints the result to IndexedDB so a tab
-refresh resumes from the exact paragraph without losing WebGPU work.
-
----
-
-## Audit Report
-
-Each export includes a structured audit trail:
-
-- Total / rewritten / skipped / flagged counts
-- Citations locked vs. verified
-- Average burstiness delta and AI-tell reduction
-- Per-paragraph before/after text, placeholders, metrics, and flag reasons
-
-Available as `.json` (machine-readable) or `.md` (human-readable).
-
----
+### Honesty by design (PRD §7 "No dark patterns")
+Every AI/heuristic output wears a visible **DRAFT** or **ADVISORY** badge and an explanatory notice. The AI Writer quotes source sentences verbatim with citations — it never paraphrases into plausibly-human prose, never strips metadata, never fabricates sources.
 
 ## Privacy
 
-**No backend.** The `.docx`, its text, your author style sample, your glossary
-terms, and all LLM inference stay in your browser. The only network traffic is
-the one-time model shard download from the WebLLM CDN (cached in IndexedDB for
-subsequent runs). You can verify this by opening DevTools → Network during a
-run.
+| What leaves your browser | What stays local |
+|---|---|
+| Literature search queries → academic APIs (CrossRef, OpenAlex, Semantic Scholar, arXiv, PubMed, DOAJ) | Your draft, notes, citations, uploaded PDF text, scraped resources |
+| Scrape URLs → chosen CORS proxy (r.jina.ai / allorigins) | WebLLM model weights & inference |
+| WebLLM model download (one-time) → HuggingFace CDN | Everything else |
 
----
+No login, no analytics, no cookies beyond localStorage.
 
-## Browser Support
+## Deploy to Vercel
 
-| Browser | Status |
-| --- | --- |
-| Chrome 113+ (desktop) | ✅ Full WebGPU |
-| Edge 113+ (desktop) | ✅ Full WebGPU |
-| Brave / Arc / Opera | ✅ if Chromium 113+ |
-| Safari 17+ (macOS 14+) | ⚠️ experimental WebGPU (`feature=WebGPU`) |
-| Firefox | ⚠️ WebGPU behind `dom.features.webgpu.enabled` |
-| iOS / Android Chrome | ⚠️ WebGPU rolling out; results vary |
+This is a **static site** — no build step, no server functions.
 
----
+### Option A: drag-and-drop (fastest)
+1. Unzip `research-workstation-pwa.zip`.
+2. Go to [vercel.com/new](https://vercel.com/new).
+3. Drag the unzipped folder onto the page.
+4. Click **Deploy**. Done.
 
-## License
+### Option B: Git
+1. Unzip, `cd` into the folder, `git init && git add . && git commit -m "init"`.
+2. Push to a GitHub/GitLab/Bitbucket repo.
+3. In Vercel, **New Project** → import the repo. Framework preset: **Other**. Build command: *(none)*. Output directory: *(root)*. Deploy.
 
-MIT — see `LICENSE` field in `package.json`. No warranty. Always verify
-rewritten academic prose yourself before submission; ProseForge is a writing
-aid, not a substitute for human judgement.
+### Option C: Vercel CLI
+```bash
+npm i -g vercel
+cd research-workstation-pwa
+vercel deploy --prod
+```
+
+`vercel.json` is included with security headers, `cleanUrls`, and correct `Content-Type` / `Service-Worker-Allowed` for `sw.js` and `manifest.json`.
+
+## Run locally
+
+No dependencies. Just serve the folder over HTTP (service workers require http(s), not `file://`):
+
+```bash
+cd research-workstation-pwa
+python3 -m http.server 8080
+# open http://localhost:8080
+```
+
+Or open `index.html` directly for a quick look (PWA/offline features won't register, but the app works).
+
+## Using WebLLM (the in-browser LLM)
+
+1. Go to **Settings → WebLLM**.
+2. Pick a model (Llama 3.2 1B is smallest/fastest, ~0.8 GB).
+3. Click **Load model**. The first load downloads weights and caches them.
+4. Once loaded, **Paper Q&A** and **AI Writer** use local LLM synthesis. Without a model loaded, they use the keyword-retrieval fallback (still fully functional, just less sophisticated).
+
+**Requires a WebGPU-capable browser:** Chrome/Edge 113+, or Safari 18+. If WebGPU is unavailable, the app still works in keyword mode.
+
+## Install as a PWA
+
+Once deployed (or served over https), the browser's install prompt lets you add Research Workstation to your home screen / desktop. It works offline after first load (app shell is cached; WebLLM model, once downloaded, is also cached).
+
+## Project structure
+
+```
+research-workstation-pwa/
+├── index.html              # app shell + script tags
+├── manifest.json           # PWA manifest
+├── vercel.json             # Vercel config + security headers
+├── sw.js                   # service worker (offline cache)
+├── .gitignore
+├── README.md              # this file
+├── css/
+│   └── app.css            # all styles (light/dark theme, responsive)
+├── icons/
+│   ├── icon-192.png
+│   ├── icon-512.png
+│   ├── icon-maskable-512.png
+│   └── icon-32.png
+└── js/
+    ├── utils.js           # shared namespace, state, persistence, helpers
+    ├── webllm.js          # WebLLM loader + unified ask() with keyword fallback
+    ├── citations.js       # APA/MLA/Chicago formatters
+    ├── search.js          # 6 API adapters + dedupe
+    ├── pdf.js             # PDF.js upload + text extraction
+    ├── scraper.js         # CORS-proxy web scraper
+    ├── chat.js            # unified Q&A over papers/docs/resources
+    ├── gap.js             # research gap heuristics
+    ├── writer.js          # RAG grounded drafting
+    ├── workspace.js       # draft editor + style checks
+    ├── notes.js           # resource & idea board
+    ├── cleaner.js          # document hygiene + AI-tells advisory
+    ├── checks.js          # checks summary rollup
+    ├── search-ui.js       # literature search view
+    ├── citations-ui.js    # citation manager view
+    ├── scraper-ui.js      # web scraper view
+    ├── upload.js          # answerthis.ai-style upload + chat landing
+    ├── settings.js        # model picker + settings view
+    └── app.js             # router + init (loaded last)
+```
+
+## Known limitations
+
+- **Abstract-only** for API papers (no full-text from search; upload the PDF for full text).
+- **Keyword heuristics ≠ semantic understanding** — the gap finder and fallback chat are pattern matchers, and the UI says so.
+- **API/CSP-dependent** — some sources may be blocked in certain networks; manual entry exists for exactly this.
+- **WebLLM model size** — first load is a large download; subsequent loads are cached.
+- **Small-scale LLMs** — a 1B model is not GPT-4. Outputs are starting scaffolds, not finished prose. That's why every output is labeled DRAFT.
+
+## License & ethics
+
+Built as a transparent, inspectable alternative to black-box AI research tools. Per the PRD's "No dark patterns" rule, **no feature helps disguise AI-authored text as human-written or evade detection**. The Document Cleaner does legitimate copy-editing only; the AI-tells panel surfaces patterns for the writer to revise themselves.
+
+Use responsibly. Verify every AI-generated claim against the original sources before relying on it.
