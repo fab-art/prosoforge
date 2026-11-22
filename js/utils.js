@@ -17,6 +17,12 @@
     documents: [],     // uploaded PDF/text documents
     draft: "",         // thesis workspace text
     pastDrafts: [],    // archived draft snapshots (for self-plagiarism check)
+    matrices: [],      // saved Evidence Matrices (Elicit-style extraction)
+    flashcards: [],    // Scholarcy-style flashcard decks per paper
+    litmapsSnapshots: {}, // per-seed snapshots of citing-work ids (manual alerts)
+    jenniPad: "",      // Write Pad (Jenni) text
+    jenniLog: [],      // AI-assist log (accepted completions, quotes)
+    jenniRefs: [],     // citations inserted via @@ in the Write Pad
     settings: {
       sources: { crossref:true, openalex:true, semantic:true, arxiv:true, pubmed:false, doaj:false },
       citationStyle: "apa",
@@ -35,10 +41,16 @@
       if(!raw) return;
       const s = JSON.parse(raw);
       // shallow-merge top-level keys (don't clobber functions, only data)
-      ["papers","notes","citations","resources","documents","draft","pastDrafts","settings","activePaperId","activeDocId","currentRoute"].forEach(k=>{
+      ["papers","notes","citations","resources","documents","draft","pastDrafts","matrices","flashcards","litmapsSnapshots","jenniPad","jenniLog","jenniRefs","settings","activePaperId","activeDocId","currentRoute"].forEach(k=>{
         if(s[k]!==undefined) State[k]=s[k];
       });
       if(!State.pastDrafts) State.pastDrafts = [];
+      if(!State.matrices) State.matrices = [];
+      if(!State.flashcards) State.flashcards = [];
+      if(!State.litmapsSnapshots) State.litmapsSnapshots = {};
+      if(!State.jenniLog) State.jenniLog = [];
+      if(!State.jenniRefs) State.jenniRefs = [];
+      if(typeof State.jenniPad !== "string") State.jenniPad = "";
       if(!State.settings) State.settings = {sources:{},citationStyle:"apa",scrapeProxy:"jina",webllmModel:"Llama-3.2-1B-Instruct-q4f32_1-MLC",webllmEnabled:false};
       if(!State.settings.sources) State.settings.sources = {crossref:true,openalex:true,semantic:true,arxiv:true,pubmed:false,doaj:false};
       if(!State.settings.webllmModel) State.settings.webllmModel = "Llama-3.2-1B-Instruct-q4f32_1-MLC";
@@ -87,8 +99,16 @@
   }
   function sentencesOf(text){
     if(!text) return [];
-    const parts = text.replace(/\s+/g," ").match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g) || [text];
-    return parts.map(s=>s.trim()).filter(Boolean);
+    const flat = text.replace(/\s+/g," ");
+    // Guard decimal numbers (p<0.001, 2.4, g = 0.38) and common abbreviations so
+    // the sentence splitter doesn't break sentences mid-number (bug found in
+    // Evidence Matrix testing — affects all extraction/heuristic modules).
+    const DOT = "\u0001DOT\u0001";
+    const guarded = flat
+      .replace(/(\d)\.(\d)/g, "$1"+DOT+"$2")
+      .replace(/\b(e\.g\.|i\.e\.|et al\.|Fig\.|Figs\.|vs\.|approx\.|cf\.|Dr\.|Prof\.|St\.)/gi, m => m.replace(/\./g, DOT));
+    const parts = guarded.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g) || [guarded];
+    return parts.map(s=>s.trim().replace(new RegExp(DOT,"g"),".")).filter(Boolean);
   }
   function wordsOf(text){ return (text||"").toLowerCase().split(/[^a-z0-9'-]+/).filter(w=>w.length>1); }
   function mean(a){ return a.length? a.reduce((x,y)=>x+y,0)/a.length : 0; }

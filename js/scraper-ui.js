@@ -48,7 +48,7 @@
       try{
         const result = await RW.Scraper.scrapeUrl(url);
         RW.Scraper.addResource(result);
-        refreshCounts();
+        RW.refreshCounts();
         status.innerHTML = `<div class="notice notice-success"><span class="ic">✅</span><div>Scraped ${result.text.length} chars from <b>${esc(result.title)}</b></div></div>`;
         renderScrapeList();
         toast("Saved scraped resource.","success");
@@ -57,7 +57,7 @@
       }finally{ btn.disabled = false; }
     });
     $("#clearScrapes", c).addEventListener("click", ()=>{
-      if(confirm("Clear all scraped resources?")){ State.resources = []; saveState(); refreshCounts(); renderScrapeList(); }
+      if(confirm("Clear all scraped resources?")){ State.resources = []; saveState(); RW.refreshCounts(); renderScrapeList(); }
     });
     renderScrapeList();
   }
@@ -85,7 +85,7 @@
       </div>
     `).join("");
     $$('[data-del]', box).forEach(b=> b.addEventListener("click", ()=>{
-      RW.Scraper.removeResource(b.dataset.del); refreshCounts(); renderScrapeList();
+      RW.Scraper.removeResource(b.dataset.del); RW.refreshCounts(); renderScrapeList();
     }));
     $$('[data-chat-scrape]', box).forEach(b=> b.addEventListener("click", ()=>{
       State.activePaperId = b.dataset.chatScrape; RW.navigate("chat");
