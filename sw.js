@@ -8,7 +8,7 @@
    are NOT precached (too large). Once fetched, the browser HTTP cache handles
    them. The app itself works offline after first load.
 ============================================================================ */
-const CACHE_VERSION = "rw-v3-2026-11-review";
+const CACHE_VERSION = "rw-v9-2026-11-guided-flow";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -22,6 +22,18 @@ const APP_SHELL = [
   "./js/scraper.js",
   "./js/chat.js",
   "./js/gap.js",
+  "./js/matrix.js",
+  "./js/consensus.js",
+  "./js/citecontext.js",
+  "./js/simgraph.js",
+  "./js/litmaps.js",
+  "./js/flashcards.js",
+  "./js/audio.js",
+  "./js/explain.js",
+  "./js/datalab.js",
+  "./js/jenni.js",
+  "./js/paperpal.js",
+  "./js/deepsearch.js",
   "./js/writer.js",
   "./js/workspace.js",
   "./js/notes.js",
@@ -33,7 +45,17 @@ const APP_SHELL = [
   "./js/scraper-ui.js",
   "./js/upload.js",
   "./js/integrity-ui.js",
+  "./js/matrix-ui.js",
+  "./js/consensus-ui.js",
+  "./js/citecontext-ui.js",
+  "./js/simgraph-ui.js",
+  "./js/litmaps-ui.js",
+  "./js/flashcards-ui.js",
+  "./js/datalab-ui.js",
+  "./js/paperpal-ui.js",
+  "./js/deepsearch-ui.js",
   "./js/settings.js",
+  "./js/flow.js",
   "./js/app.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

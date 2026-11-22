@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Research Workstation — client-side literature review & thesis writing workspace with WebLLM-powered chat, paper upload, and grounded drafting.">
-<meta name="theme-color" content="#2563eb">
+<meta name="description" content="Research Workstation — client-side literature review & thesis writing workspace with WebLLM-powered chat, paper upload, and grounded drafting, guided by a step-by-step research flow.">
+<meta name="theme-color" content="#0071e3">
 <meta name="color-scheme" content="light dark">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" href="icons/icon-192.png">
@@ -16,20 +16,42 @@
 <div class="app">
   <aside class="sidebar" id="sidebar">
     <div class="logo"><span class="em">📚</span> Research Workstation</div>
-    <div class="brand-sub">answerthis-style research, free &amp; in-browser</div>
+    <div class="brand-sub">A guided, free &amp; in-browser research flow</div>
     <nav id="nav">
-      <button class="nav-btn" data-route="upload"><span class="ic">📄</span> Upload &amp; Chat</button>
-      <button class="nav-btn" data-route="search"><span class="ic">🔍</span> Literature Search <span class="nav-count" id="cnt-papers">0</span></button>
+      <button class="nav-btn" data-route="home"><span class="ic">🏠</span> Home</button>
+
+      <div class="nav-section-label">1 · Scope the gap</div>
+      <button class="nav-btn" data-route="gap"><span class="flow-n">1</span> Research Gap Finder</button>
+      <button class="nav-btn" data-route="search"><span class="flow-n">2</span> Literature Search <span class="nav-count" id="cnt-papers">0</span></button>
+      <button class="nav-btn" data-route="deepsearch"><span class="flow-n">3</span> Deep Search</button>
+
+      <div class="nav-section-label">2 · Read &amp; collect evidence</div>
+      <button class="nav-btn" data-route="upload"><span class="flow-n">4</span> Upload &amp; Chat</button>
+      <button class="nav-btn" data-route="matrix"><span class="flow-n">5</span> Evidence Matrix</button>
+      <button class="nav-btn" data-route="consensus"><span class="flow-n">6</span> Agreement Meter</button>
+      <button class="nav-btn" data-route="citecontext"><span class="flow-n">7</span> Citation Context</button>
+      <button class="nav-btn" data-route="simgraph"><span class="flow-n">8</span> Similarity Graph</button>
+      <button class="nav-btn" data-route="timeline"><span class="flow-n">9</span> Citation Timeline</button>
+      <button class="nav-btn" data-route="flashcards"><span class="flow-n">10</span> Flashcards</button>
+
+      <div class="nav-section-label">3 · Write</div>
+      <button class="nav-btn" data-route="writer"><span class="flow-n">11</span> AI Writer</button>
+      <button class="nav-btn" data-route="pad"><span class="flow-n">12</span> Write Pad</button>
+      <button class="nav-btn" data-route="workspace"><span class="flow-n">13</span> Thesis Workspace</button>
+
+      <div class="nav-section-label">4 · Polish &amp; verify</div>
+      <button class="nav-btn" data-route="paperpal"><span class="flow-n">14</span> Paperpal Consistency</button>
+      <button class="nav-btn" data-route="cleaner"><span class="flow-n">15</span> Document Cleaner</button>
+      <button class="nav-btn" data-route="review"><span class="flow-n">16</span> Integrity Review</button>
+      <button class="nav-btn" data-route="checks"><span class="flow-n">17</span> Checks Summary</button>
+
+      <div class="nav-section-label">Supporting tools</div>
       <button class="nav-btn" data-route="chat"><span class="ic">💬</span> Paper Q&amp;A</button>
-      <button class="nav-btn" data-route="gap"><span class="ic">🔭</span> Research Gaps</button>
-      <button class="nav-btn" data-route="writer"><span class="ic">✍️</span> AI Writer</button>
-      <button class="nav-btn" data-route="workspace"><span class="ic">📝</span> Thesis Workspace</button>
+      <button class="nav-btn" data-route="audio"><span class="ic">🎧</span> Audio Overview</button>
       <button class="nav-btn" data-route="notes"><span class="ic">📌</span> Resource Board <span class="nav-count" id="cnt-notes">0</span></button>
       <button class="nav-btn" data-route="citations"><span class="ic">📖</span> Citations <span class="nav-count" id="cnt-cites">0</span></button>
       <button class="nav-btn" data-route="scraper"><span class="ic">🕷️</span> Web Scraper <span class="nav-count" id="cnt-scrape">0</span></button>
-      <button class="nav-btn" data-route="cleaner"><span class="ic">🧹</span> Document Cleaner</button>
-      <button class="nav-btn" data-route="review"><span class="ic">🛡️</span> Integrity Review</button>
-      <button class="nav-btn" data-route="checks"><span class="ic">✅</span> Checks Summary</button>
+      <button class="nav-btn" data-route="datalab"><span class="ic">🧪</span> Data Lab</button>
       <button class="nav-btn" data-route="settings"><span class="ic">⚙️</span> Settings</button>
     </nav>
     <div class="sidebar-footer">
@@ -42,7 +64,7 @@
   <div class="main">
     <header class="topbar">
       <button class="menu-toggle" id="menuToggle">☰</button>
-      <h1 id="viewTitle">Upload &amp; Chat</h1>
+      <h1 id="viewTitle">Home</h1>
       <div class="topbar-actions" id="topActions"></div>
     </header>
     <div class="content" id="content"></div>
@@ -65,13 +87,36 @@
 <script src="js/cleaner.js"></script>
 <script src="js/checks.js"></script>
 <script src="js/integrity.js"></script>
+<script src="js/matrix.js"></script>
+<script src="js/consensus.js"></script>
+<script src="js/citecontext.js"></script>
+<script src="js/simgraph.js"></script>
+<script src="js/litmaps.js"></script>
+<script src="js/flashcards.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/explain.js"></script>
+<script src="js/datalab.js"></script>
+<script src="js/jenni.js"></script>
+<script src="js/paperpal.js"></script>
+<script src="js/deepsearch.js"></script>
 <!-- UI render modules -->
 <script src="js/search-ui.js"></script>
 <script src="js/citations-ui.js"></script>
 <script src="js/scraper-ui.js"></script>
 <script src="js/upload.js"></script>
 <script src="js/integrity-ui.js"></script>
+<script src="js/matrix-ui.js"></script>
+<script src="js/consensus-ui.js"></script>
+<script src="js/citecontext-ui.js"></script>
+<script src="js/simgraph-ui.js"></script>
+<script src="js/litmaps-ui.js"></script>
+<script src="js/flashcards-ui.js"></script>
+<script src="js/datalab-ui.js"></script>
+<script src="js/paperpal-ui.js"></script>
+<script src="js/deepsearch-ui.js"></script>
 <script src="js/settings.js"></script>
+<!-- Guided flow: landing page + step overview + stepper component -->
+<script src="js/flow.js"></script>
 <!-- App router + init (last) -->
 <script src="js/app.js"></script>
 </body>
