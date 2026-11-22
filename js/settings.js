@@ -138,7 +138,7 @@
         ["papers","notes","citations","resources","documents","draft","settings","activePaperId","activeDocId"].forEach(k=>{
           if(data[k]!==undefined) RW.State[k] = data[k];
         });
-        saveState(); refreshCounts();
+        saveState(); RW.refreshCounts();
         toast("Data imported.","success");
         render();
       }catch(err){ toast("Import failed: "+err.message, "error"); }

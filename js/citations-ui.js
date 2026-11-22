@@ -55,7 +55,7 @@
         doi: $("#cDoi", c).value.trim(),
         url: $("#cUrl", c).value.trim()
       });
-      saveState(); refreshCounts();
+      saveState(); RW.refreshCounts();
       ["cTitle","cAuthors","cYear","cVenue","cDoi","cUrl"].forEach(id=> $("#"+id, c).value="");
       renderCiteList();
       toast("Citation added.","success");
@@ -72,7 +72,7 @@
           added++;
         }
       });
-      saveState(); refreshCounts(); renderCiteList();
+      saveState(); RW.refreshCounts(); renderCiteList();
       toast(added? `Imported ${added} citation(s).` : "Nothing new to import.", added? "success" : "info");
     });
     $("#copyAll", c).addEventListener("click", ()=>{
@@ -81,7 +81,7 @@
       navigator.clipboard.writeText(text).then(()=> toast("Copied.","success"));
     });
     $("#clearCites", c).addEventListener("click", ()=>{
-      if(confirm("Clear all citations?")){ State.citations = []; saveState(); refreshCounts(); renderCiteList(); }
+      if(confirm("Clear all citations?")){ State.citations = []; saveState(); RW.refreshCounts(); renderCiteList(); }
     });
     renderCiteList();
   }
@@ -103,7 +103,7 @@
     `).join("");
     $$('[data-del]', box).forEach(b=> b.addEventListener("click", ()=>{
       State.citations = State.citations.filter(c=>c.id!==b.dataset.del);
-      saveState(); refreshCounts(); renderCiteList();
+      saveState(); RW.refreshCounts(); renderCiteList();
     }));
   }
 

@@ -6,12 +6,23 @@ A free, open, in-browser research assistant — an answerthis.ai-style "upload a
 
 ### answerthis.ai core (the "Upload & Chat" landing)
 - **📄 Upload a PDF** (or `.txt` / `.md`) → text is extracted **client-side** with PDF.js → chat with the document.
-- **💬 Paper Q&A** grounded in retrieved context. Uses WebLLM if a model is loaded; otherwise falls back to honest keyword-overlap retrieval that says *"this source does not address your question"* rather than guessing.
+- **💬 Paper Q&A** grounded in retrieved context. Uses WebLLM if a model is loaded; otherwise falls back to honest keyword-overlap retrieval that says *"this source does not address your question"* rather than guessing. Answers carry clickable `📄 p. N` chips → a page-text viewer where you can **select any passage → ✨ Explain / 🧩 Simplify / 📖 Glossary** (SciSpace-style reading copilot on extracted text).
 
 ### Literature review workspace
-- **🔍 Literature Search** across 6 free APIs: CrossRef, OpenAlex, Semantic Scholar, arXiv, PubMed, DOAJ. Deduped by title. Manual-entry fallback for paywalled/CSP-blocked papers.
+- **🔍 Literature Search** across 6 free APIs: CrossRef, OpenAlex, Semantic Scholar, arXiv, PubMed, DOAJ. Deduped by title. Manual-entry fallback for paywalled/CSP-blocked papers. S2 results carry their native TLDR chip.
+- **🌀 Deep Search** — Undermind-style iterative loop: seed queries, then new rounds aimed at what's missing (WebLLM-refined, or a deterministic gap-finder without a model). Every paper shows **which queries found it and in which round**; deterministic coverage stats name the question terms with no hits. Results are framed as **leads, not exhaustive coverage**.
 - **🔭 Research Gap Finder** — heuristic flags for recency, geographic concentration, self-reported limitation language, abstract coverage, source diversity. Labeled **ADVISORY**.
+- **🔬 Evidence Matrix** — Elicit-style extraction & screening (Phase 1).
+- **⚖️ Agreement Meter** — Consensus-style yes/no evidence meter (Phase 2).
+- **🔗 Citation Context** — Scite-lite supporting/contrasting/mentioning classification of citing abstracts, with matched cue sentences (Phase 2).
+- **🕸️ Similarity Graph** — Connected Papers-style bibliographic-coupling graph on a hand-rolled canvas force layout (Phase 3).
+- **🗺️ Citation Timeline** — Litmaps-style: citation layers over time (seed → ① direct citers → ② citers-of-citers; x = year, node size = citations, color = year) + a **manual** "🔔 check for new citing papers" alert that diffs OpenAlex against your last snapshot (a pure PWA has no server → no push, and the UI says so).
+- **🎴 Flashcards** — Scholarcy-style study decks from any paper/document: TL;DR, objective, methods + sample sizes, key findings, limitations, keywords, abbreviation glossary, reference extracts. **Every card carries its verbatim source sentences.** Optional WebLLM refinement appends 🤖 AI cards (never overwrites). Flip-card grid, decks persist, Markdown/CSV export, pin to the board.
+- **🎧 Audio Overview** — NotebookLM-style two-host podcast dialogue about your source, written by WebLLM (or composed deterministically without a model) and read aloud with two built-in browser voices. Play/pause/stop, rate control, editable script, .txt export, pin to the board.
 - **✍️ AI Writer** — drafts a paragraph grounded **strictly** in your collected papers (and optionally uploaded PDFs). WebLLM synthesis with `[n]` inline citations → real APA/MLA/Chicago in-text citations. Fallback: verbatim-quote scaffold ranked by keyword overlap. Labeled **DRAFT — verify & rewrite**.
+- **🪄 Write Pad** — Jenni-style drafting: pause and WebLLM proposes one continuation sentence grounded in your library (Tab to accept); type `@@` to insert a formatted citation from your library. Without a model it offers verbatim library quotes + real citations instead. Every accepted insertion is recorded in an **AI-assist log** — nothing AI-written hides in your text. Export .md with references + transparency log.
+- **🧪 Data Lab** — Julius-style analysis with your data staying on the device: load a CSV, ask a question; the model's only job is to pick an analysis and columns from a fixed menu (describe / frequency / correlation / group means / t-test / regression) — it never computes numbers or writes free-form code. Numbers come from a deterministic JavaScript fast-path and can be cross-checked with real **Pyodide + pandas** in a WASM sandbox (generated Python shown). Canvas charts, .md report.
+- **🎓 Paperpal** — deterministic consistency suite: abbreviation definitions & casing, unit/percent spacing, UK-vs-US spelling families, hyphenation variants, "eg/ie" style, lowercased headers. Mechanical autofix follows majority style + your chosen dialect, with undo. Optional WebLLM grammar pass on one paragraph at a time with **per-suggestion accept/reject** (logged).
 - **📝 Thesis Workspace** — draft editor with live per-paragraph style checks (sentence-length uniformity, AI-cliché phrases, passive-voice density). Advisory only, never auto-edits. Export to `.md` / `.html` / `.txt`.
 - **📌 Resource & Idea Board** — tagged, searchable notes. localStorage only.
 - **📖 Citation Manager** — manual entry + one-click import from your paper library; APA/MLA/Chicago auto-formatting with serial commas.
@@ -26,9 +37,9 @@ Every AI/heuristic output wears a visible **DRAFT** or **ADVISORY** badge and an
 
 | What leaves your browser | What stays local |
 |---|---|
-| Literature search queries → academic APIs (CrossRef, OpenAlex, Semantic Scholar, arXiv, PubMed, DOAJ) | Your draft, notes, citations, uploaded PDF text, scraped resources |
+| Literature search queries → academic APIs (CrossRef, OpenAlex, Semantic Scholar, arXiv, PubMed, DOAJ) | Your draft, notes, citations, uploaded PDF text, scraped resources, CSV data |
 | Scrape URLs → chosen CORS proxy (r.jina.ai / allorigins) | WebLLM model weights & inference |
-| WebLLM model download (one-time) → HuggingFace CDN | Everything else |
+| WebLLM model download (one-time) → HuggingFace CDN | Data Lab: CSV + all computed numbers (JS fast-path; optional Pyodide/pandas run locally in WASM) |
 
 No login, no analytics, no cookies beyond localStorage.
 
@@ -55,6 +66,10 @@ vercel deploy --prod
 ```
 
 `vercel.json` is included with security headers, `cleanUrls`, and correct `Content-Type` / `Service-Worker-Allowed` for `sw.js` and `manifest.json`.
+
+## Status
+
+All 15 reverse-engineered tools have working replacements — see `ROADMAP.md` for the per-tool mechanism notes and honest limits.
 
 ## Run locally
 
@@ -105,28 +120,57 @@ research-workstation-pwa/
     ├── search.js          # 6 API adapters + dedupe
     ├── pdf.js             # PDF.js upload + text extraction
     ├── scraper.js         # CORS-proxy web scraper
-    ├── chat.js            # unified Q&A over papers/docs/resources
+    ├── chat.js            # unified Q&A + page viewer (ChatPDF anchors)
     ├── gap.js             # research gap heuristics
+    ├── matrix.js          # Evidence Matrix extraction/screening (Elicit)
+    ├── consensus.js       # Agreement Meter evidence classification (Consensus)
+    ├── citecontext.js     # Scite-lite citation-context classification
+    ├── simgraph.js        # bibliographic-coupling similarity graph (Connected Papers)
+    ├── litmaps.js         # citation timeline layers + alert diffs (Litmaps)
+    ├── flashcards.js      # deterministic flashcard extractors (Scholarcy)
+    ├── audio.js           # two-host dialogue + SpeechSynthesis player (NotebookLM)
+    ├── explain.js         # selection explain/simplify + glossary (SciSpace)
     ├── writer.js          # RAG grounded drafting
     ├── workspace.js       # draft editor + style checks
     ├── notes.js           # resource & idea board
     ├── cleaner.js          # document hygiene + AI-tells advisory
     ├── checks.js          # checks summary rollup
+    ├── integrity.js       # integrity review engine
     ├── search-ui.js       # literature search view
     ├── citations-ui.js    # citation manager view
     ├── scraper-ui.js      # web scraper view
     ├── upload.js          # answerthis.ai-style upload + chat landing
+    ├── integrity-ui.js    # integrity review view
+    ├── matrix-ui.js       # evidence matrix view
+    ├── consensus-ui.js    # agreement meter view
+    ├── citecontext-ui.js  # citation context view
+    ├── simgraph-ui.js     # similarity graph canvas view
+    ├── litmaps-ui.js      # citation timeline canvas view
+    ├── flashcards-ui.js   # flashcards view
+    ├── datalab.js         # CSV parsing, stats, JS fast-path, Python templates (Julius)
+    ├── datalab-ui.js      # data lab view (Pyodide loader, canvas charts)
+    ├── jenni.js           # write pad: completions, @@ cite-insert, assist log (Jenni)
+    ├── paperpal.js        # deterministic consistency checks + autofix (Paperpal)
+    ├── paperpal-ui.js     # consistency suite view + grammar pass
+    ├── deepsearch.js      # iterative query loop with provenance (Undermind)
+    ├── deepsearch-ui.js   # deep search view
     ├── settings.js        # model picker + settings view
     └── app.js             # router + init (loaded last)
 ```
 
 ## Known limitations
 
-- **Abstract-only** for API papers (no full-text from search; upload the PDF for full text).
-- **Keyword heuristics ≠ semantic understanding** — the gap finder and fallback chat are pattern matchers, and the UI says so.
+- **Abstract-only** for API papers (no full-text from search; upload the PDF for full text). Flashcards built from library papers are labeled abstract-level.
+- **Keyword heuristics ≠ semantic understanding** — the gap finder, fallback chat and deterministic extractors are pattern matchers, and the UI says so.
 - **API/CSP-dependent** — some sources may be blocked in certain networks; manual entry exists for exactly this.
 - **WebLLM model size** — first load is a large download; subsequent loads are cached.
 - **Small-scale LLMs** — a 1B model is not GPT-4. Outputs are starting scaffolds, not finished prose. That's why every output is labeled DRAFT.
+- **Timeline is a sample** — the Citation Timeline draws what OpenAlex pages return, not the complete citation graph.
+- **Manual alerts** — no push/email alerts are possible without a server; the check button diffs on demand.
+- **System voices** — Audio Overview uses built-in SpeechSynthesis voices; quality varies by OS/browser and won't match NotebookLM's studio audio.
+- **Deep Search = leads** — the loop fires bounded API calls per round and is limited by a small model's query imagination; it is not a systematic search.
+- **Data Lab** — CSV only (Excel files need exporting first); the optional Pyodide+pandas add-on downloads ~10–15 MB on first use; the LLM selects analyses from a fixed menu and never computes numbers.
+- **Grammar pass** — the WebLLM grammar check runs on one paragraph at a time (small-model context limits); deterministic consistency checks have no such limit.
 
 ## License & ethics
 

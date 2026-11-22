@@ -63,7 +63,7 @@
 
   // --- Semantic Scholar ---
   async function searchSemanticScholar(q){
-    const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(q)}&limit=15&fields=title,authors,year,abstract,externalIds,url`;
+    const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(q)}&limit=15&fields=title,authors,year,abstract,externalIds,url,tldr`;
     const data = await fetchJSON(url);
     return (data.data||[]).map(it=>({
       id:"ss-"+(it.paperId||uid()),
@@ -74,6 +74,7 @@
       doi: it.externalIds?.DOI || "",
       url: it.url || (it.externalIds?.DOI? "https://doi.org/"+it.externalIds.DOI : ""),
       abstract: it.abstract || "",
+      tldr: (it.tldr && it.tldr.text) || "",
       venue: ""
     }));
   }
@@ -174,8 +175,27 @@
     return dedupePapers(all);
   }
 
+  // --- Semantic Scholar TLDR (Phase 3) ---
+  // One-sentence AI summary per paper. S2 search results carry it natively
+  // (field added above); for other sources, fetch by DOI — else by title match.
+  async function fetchTLDR(paper){
+    if(paper.tldr) return { tldr: paper.tldr, cached: true };
+    const base = "https://api.semanticscholar.org/graph/v1/paper/";
+    let url = null;
+    if(paper.doi) url = base + "DOI:" + encodeURIComponent(paper.doi) + "?fields=tldr";
+    else if(paper.title) url = base + "search?query=" + encodeURIComponent(paper.title.slice(0,180)) + "&limit=1&fields=tldr";
+    else throw new Error("Need a DOI or a title to look up a TLDR.");
+    const r = await fetch(url);
+    if(r.status === 429) throw new Error("Semantic Scholar rate limit (HTTP 429) — wait ~1 min and retry. Unauthenticated quota is shared.");
+    if(!r.ok) throw new Error("Semantic Scholar lookup failed (HTTP " + r.status + ").");
+    const j = await r.json();
+    const tldr = paper.doi ? (j.tldr && j.tldr.text) : ((j.data||[])[0]?.tldr?.text || null);
+    return { tldr: tldr || null };
+  }
+
   Object.assign(RW, {
     Search: { runSearch, SOURCE_FUNCS, SOURCE_LABELS,
-      searchCrossRef, searchOpenAlex, searchSemanticScholar, searchArxiv, searchPubMed, searchDOAJ }
+      searchCrossRef, searchOpenAlex, searchSemanticScholar, searchArxiv, searchPubMed, searchDOAJ,
+      reconstructAbstract, fetchJSON, fetchTLDR }
   });
 })();

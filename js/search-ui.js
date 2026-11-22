@@ -64,7 +64,7 @@
     $("#q", c).addEventListener("keydown", e=>{ if(e.key==="Enter") doSearch(); });
     $("#clearPapers", c).addEventListener("click", ()=>{
       if(confirm("Remove all papers from your library? This cannot be undone.")){
-        State.papers = []; saveState(); refreshCounts(); renderResults([]);
+        State.papers = []; saveState(); RW.refreshCounts(); renderResults([]);
         $("#resCount", c).textContent = "0";
       }
     });
@@ -74,8 +74,11 @@
     $("#resCount", c).textContent = State.papers.length;
   }
 
+  let currentPapers = [];
+
   function renderResults(papers){
     const box = $("#results");
+    currentPapers = papers;
     if(!papers.length){
       box.innerHTML = `<div class="empty"><span class="ic">📭</span><div>No papers yet. Search above or add one manually.</div></div>`;
       return;
@@ -92,10 +95,27 @@
         State.papers.push({ ...p, collected:true, addedAt:Date.now() });
         toast("Added to library.","success");
       }
-      saveState(); refreshCounts(); renderResults(papers);
+      saveState(); RW.refreshCounts(); renderResults(papers);
     }));
     $$('[data-chat]', box).forEach(b=> b.addEventListener("click", ()=>{
       State.activePaperId = b.dataset.chat; RW.navigate("chat");
+    }));
+    // Phase 3: per-paper TLDR fetch from Semantic Scholar
+    $$('[data-tldr]', box).forEach(b=> b.addEventListener("click", async ()=>{
+      const p = currentPapers.find(x=>x.id===b.dataset.tldr);
+      if(!p) return;
+      b.disabled = true; b.innerHTML = `<span class="spinner"></span>`;
+      try{
+        const { tldr } = await RW.Search.fetchTLDR(p);
+        if(tldr){
+          p.tldr = tldr;
+          const stored = State.papers.find(x=>x.id===p.id);
+          if(stored){ stored.tldr = tldr; saveState(); }
+        } else {
+          toast("Semantic Scholar has no TLDR for this paper.","info");
+        }
+      }catch(err){ toast(err.message,"error"); }
+      renderResults(currentPapers);
     }));
   }
 
@@ -119,9 +139,11 @@
         <button class="btn btn-sm ${collected?'btn-danger':'btn-primary'}" data-collect="${esc(p.id)}">${collected?'✕ Remove':'+ Collect'}</button>
       </div>
       ${abbr?`<div class="paper-abstract">${esc(abbr)}${p.abstract&&p.abstract.length>280?'…':''}</div>`:"<div class='paper-abstract muted'><em>No abstract available.</em></div>"}
+      ${p.tldr?`<div class="tldr-chip small"><b>TL;DR</b> ${esc(p.tldr)} <span class="muted">— Semantic Scholar</span></div>`:""}
       <div class="flex gap-sm mt wrap">
         ${p.url?`<a class="btn btn-sm" href="${esc(p.url)}" target="_blank" rel="noopener">↗ Open</a>`:""}
         <button class="btn btn-sm" data-chat="${esc(p.id)}">💬 Chat</button>
+        ${!p.tldr&&(p.doi||p.title)?`<button class="btn btn-sm" data-tldr="${esc(p.id)}" title="Fetch a one-sentence TLDR from Semantic Scholar">🧾 TL;DR</button>`:""}
       </div>
     </div>`;
   }
@@ -160,7 +182,7 @@
         abstract: $("#mAbstract", modal).value.trim(),
         collected:true, addedAt:Date.now()
       };
-      State.papers.push(paper); saveState(); refreshCounts();
+      State.papers.push(paper); saveState(); RW.refreshCounts();
       toast("Paper added to library.","success");
       close(); render();
     });

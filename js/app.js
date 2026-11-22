@@ -11,9 +11,18 @@
   const ROUTES = {
     upload:    { title:"Upload & Chat",            render: ()=>RW.Upload.render() },
     search:    { title:"Literature Search",        render: ()=>RW.SearchUI.render() },
+    deepsearch:{ title:"Deep Search",              render: ()=>RW.DeepSearchUI.render() },
     chat:      { title:"Paper Q&A",                render: ()=>RW.Chat.render() },
+    audio:     { title:"Audio Overview",           render: ()=>RW.Audio.render() },
     gap:       { title:"Research Gap Finder",      render: ()=>RW.Gap.render() },
+    matrix:    { title:"Evidence Matrix",           render: ()=>RW.MatrixUI.render() },
+    consensus: { title:"Agreement Meter",           render: ()=>RW.ConsensusUI.render() },
+    citecontext: { title:"Citation Context",        render: ()=>RW.CiteContextUI.render() },
+    simgraph:  { title:"Similarity Graph",          render: ()=>RW.SimGraphUI.render() },
+    timeline:  { title:"Citation Timeline",         render: ()=>RW.LitmapsUI.render() },
+    flashcards:{ title:"Flashcards",                render: ()=>RW.FlashcardsUI.render() },
     writer:    { title:"AI Writer",                 render: ()=>RW.Writer.render() },
+    pad:       { title:"Write Pad (autocomplete)", render: ()=>RW.Jenni.render() },
     workspace: { title:"Thesis Workspace",         render: ()=>RW.Workspace.render() },
     notes:     { title:"Resource & Idea Board",    render: ()=>RW.Notes.render() },
     citations: { title:"Citation Manager",          render: ()=>RW.CitationsUI.render() },
@@ -21,6 +30,8 @@
     cleaner:   { title:"Document Cleaner",         render: ()=>RW.Cleaner.render() },
     review:    { title:"Integrity Review",          render: ()=>RW.IntegrityUI.render() },
     checks:    { title:"Checks Summary",           render: ()=>RW.Checks.render() },
+    paperpal:  { title:"Paperpal Consistency",     render: ()=>RW.PaperpalUI.render() },
+    datalab:   { title:"Data Lab",                 render: ()=>RW.DataLabUI.render() },
     settings:  { title:"Settings",                  render: ()=>RW.Settings.render() },
   };
 
